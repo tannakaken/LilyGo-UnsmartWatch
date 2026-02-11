@@ -1,10 +1,16 @@
+
 /**
  * @file      main.cpp
  * @author    Lewis He (lewishe@outlook.com)
  * @license   MIT
  * @copyright Copyright (c) 2025  ShenZhen XinYuan Electronic Technology Co., Ltd
  * @date      2025-05-15
- *
+ * 
+ * Modifications:
+ *   Copyright (c) 2026 Tannakaken
+ *   Modified for custom smartwatch device project.
+ * 
+ * Based on original work by https://github.com/Xinyuan-LilyGO/LilyGoLib-PlatformIO
  */
 #include <LilyGoLib.h>
 #include <LV_Helper.h>

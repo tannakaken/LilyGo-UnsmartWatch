@@ -1,3 +1,17 @@
+# Unsmart Watch (Based on LilyGoLib)
+
+## About this Project
+
+This repository contains firmware for a no-nonsense clock app that runs on the LilyGo T-Watch S3. 
+
+This repository is based on [LilyGoLib-PlatformIO](https://github.com/Xinyuan-LilyGO/LilyGoLib-PlatformIO).
+
+The only major change is in main.cpp, and this program was created by Tannakaken <tannakaken@gmail.com> based on samples in original repository.
+
+The original README is available below.
+
+## Original README
+
 <div align="center" markdown="1">
   <img src=".github/LilyGo_logo.png" alt="LilyGo logo" width="100"/>
 </div>
