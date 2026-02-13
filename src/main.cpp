@@ -18,6 +18,10 @@
 #include <time.h>
 #include <stdlib.h>
 #include <esp_sntp.h>
+#include "common.hpp"
+#include "decenter_clock.hpp"
+#include "battery_clock.hpp"
+
 
 lv_obj_t *mbox;
 #define SSID_LENGTH 32
@@ -161,141 +165,68 @@ static void set_time_event_callback(lv_event_t *event)
     lv_obj_align_to(list, text, LV_ALIGN_OUT_BOTTOM_MID, 0, 0);
 }
 
-// なぜか画面の大きさちょうどを目指すとと画面の下の方が黒くなって、エラーになって、画像描画ができないので、余裕を持たせる。
-// 画面の幅が240x240
-static const uint8_t CANVAS_WIDTH = 200;
-static const uint8_t CANVAS_HEIGHT = 200;
-static const uint8_t HALF_WIDTH = CANVAS_WIDTH / 2;
-static const uint8_t HALF_HEIGHT = CANVAS_HEIGHT / 2;
-static int32_t center_x = HALF_WIDTH;
-static int32_t center_y = HALF_HEIGHT;
-
-/**
- * @brief 文字盤の半径
- * 
- */
-static const float DIAL_RADIUS = 80.0f;
-
-void calc_clock_coord(const float theta, lv_point_precise_t *point) {
-    point->x = HALF_WIDTH + cos(theta - M_PI_2) * DIAL_RADIUS;
-    point->y = HALF_HEIGHT + sin(theta - M_PI_2) * DIAL_RADIUS;
-}
-
-void drawline(lv_layer_t *layer, float theta, lv_color_t color, const float ratio, const uint8_t width) {
-    lv_draw_line_dsc_t line_dsc;
-    lv_draw_line_dsc_init(&line_dsc);
-    line_dsc.color = color;
-    line_dsc.p1 = {static_cast<float>(center_x), static_cast<float>(center_y)};
-    lv_point_precise_t target;
-    calc_clock_coord(theta, &target);
-    line_dsc.p2 = {ratio * (target.x - center_x) + center_x, ratio * (target.y - center_y) + center_y};
-    line_dsc.width = width;
-    lv_draw_line(layer, &line_dsc);
-}
-
 lv_obj_t *canvas;
 lv_color_t bg_color;
 struct tm timeinfo;
-uint8_t hour_num = 12;
 
-// 文字盤の文字のためのバッファ。バッファを使いまわすと上書きされてしまうため。
-static char dial_buf[256];
+enum ClockMode {
+    DECENTER_CLOCK_MODE = 0,
+    BATTERY_CLOCK_MODE = 1,
+};
+
+static ClockMode clock_mode = DECENTER_CLOCK_MODE;
 
 void draw_clock() {
-    lv_layer_t layer;
-    lv_canvas_init_layer(canvas, &layer);
-    lv_canvas_fill_bg(canvas, bg_color, LV_OPA_COVER);
-    // 文字盤を描写
-    for (uint8_t i = 1; i <= hour_num; ++i) {
-        lv_draw_label_dsc_t label_dsc;
-        lv_draw_label_dsc_init(&label_dsc);
-        label_dsc.color = lv_color_black();
-        label_dsc.font = &lv_font_montserrat_10;
-        label_dsc.opa = LV_OPA_COVER;
-        label_dsc.align = LV_TEXT_ALIGN_CENTER;
-        // 微調整
-        label_dsc.ofs_x = 1;
-        label_dsc.ofs_y = 3;
-        itoa(i, dial_buf + (4 * i), 10);
-        label_dsc.text = dial_buf + (4 * i);
-        float theta = static_cast<float>(i) * M_PI * 2 / hour_num;
-        lv_point_precise_t target;
-        calc_clock_coord(theta, &target);
-        lv_area_t area = {
-            static_cast<int32_t>(target.x) - 10,
-            static_cast<int32_t>(target.y) - 10,
-            static_cast<int32_t>(target.x) + 10,
-            static_cast<int32_t>(target.y) + 10,
-        };
-        lv_draw_label(&layer, &label_dsc, &area);
+    switch (clock_mode) {
+    case DECENTER_CLOCK_MODE:
+        draw_decenter_clock();
+        break;
+    case BATTERY_CLOCK_MODE:
+        draw_battery_clock();
+        break;
+
     }
-
-    drawline(
-        &layer,
-        timeinfo.tm_sec / 30.0 * M_PI,
-        lv_palette_main(LV_PALETTE_RED),
-        0.9,
-        1
-    );
-    drawline(
-        &layer,
-        timeinfo.tm_min / 30.0 * M_PI + timeinfo.tm_sec / 1800.0f * M_PI,
-        lv_color_black(),
-        0.7,
-        2
-    );
-    drawline(
-        &layer,
-        timeinfo.tm_hour / 6.0 * M_PI + timeinfo.tm_min / 360.0f * M_PI + timeinfo.tm_sec / 21600.0f * M_PI,
-        lv_color_black(),
-        0.4,
-        3
-    );
-
-    lv_draw_rect_dsc_t rect_dsc;
-    lv_draw_rect_dsc_init(&rect_dsc);
-
-    rect_dsc.bg_color = lv_color_black();
-    rect_dsc.bg_opa   = LV_OPA_COVER;
-    rect_dsc.border_width = 0;
-
-    int radius = 4;
-    int diameter = radius * 2;
-
-    /* 角丸を最大にすることで円になる */
-    rect_dsc.radius = radius;
-    lv_area_t area = {
-        center_x - radius,
-        center_y - radius,
-        center_x + radius,
-        center_y + radius,
-    };
-    /* 円を描画 */
-    lv_draw_rect(
-        &layer,
-        &rect_dsc,
-        &area
-    );
-
-
-    lv_canvas_finish_layer(canvas, &layer);
 }
 
 void gesture_callback(lv_event_t * event)
 {
-    lv_indev_t *indev = lv_indev_active();
-    if (indev == NULL) {
+    switch (clock_mode)
+    {
+    case DECENTER_CLOCK_MODE:
+        decenter_clock_gesture_callback();
+        break;
+    case BATTERY_CLOCK_MODE:
+        battery_clock_gesture_callback();
+        break;
+    } 
+}
+
+
+/**
+ * @brief 現在は電源ボタンのクリックのみ処理している。
+ * 
+ * 詳しくは.pio/libdeps/LilyGolib/exanokes/power/PowerManageEvent/PowerManageEvent.inoを参照せよ。
+ * 
+ * @param event 
+ * @param params 
+ * @param user_data 
+ */
+void power_event_cb(DeviceEvent_t event, void*params, void*user_data)
+{
+    if (event != POWER_EVENT) {
         return;
     }
-    lv_point_t point;
-    lv_indev_get_point(indev, &point);
-    int32_t diff_x = center_x - point.x;
-    int32_t diff_y = center_y - point.y;
-    float diff = sqrt(diff_x * diff_x + diff_y * diff_y);
-    if (diff < 40) {
-        center_x = point.x - 10;
-        center_y = point.y - 10;
-        draw_clock();
+    switch (instance.getPMUEventType(params)) {
+    case PMU_EVENT_KEY_CLICKED:
+        Serial.println("Power button is clicked");
+        if (clock_mode == BATTERY_CLOCK_MODE) {
+            clock_mode = DECENTER_CLOCK_MODE;
+        } else {
+            clock_mode = static_cast<ClockMode>(clock_mode + 1);
+        }
+        break;
+    default:
+        break;
     }
 }
 
@@ -348,10 +279,28 @@ void setup()
     bg_color = lv_color_make(200, 200, 200);
     lv_canvas_fill_bg(canvas, bg_color, LV_OPA_COVER);
 
+    // Clear all interrupt status
+    instance.pmu.clearIrqStatus();
+
+    // Enable the required interrupt function
+    // 電源管理系のイベントを処理するためには、これをenableする必要がある。
+    // 電源ボタンのクリックのみ登録。
+    // 電源ボタンの長押しや、vbus(USB電源)の接続・切断、
+    // バッテリーの接続切断、重電の開始・終了などのイベントがenableできる。
+    // 詳しくは.pio/libdeps/LilyGolib/exanokes/power/PowerManageEvent/PowerManageEvent.inoを参照せよ。
+    instance.pmu.enableIRQ(XPOWERS_AXP2101_PKEY_SHORT_IRQ);
+
+    // バッテリーの充電率を確認できるようにする。
+    // 詳しくは.pio/libdeps/LilyGolib/exanokes/power/PowerManageMonitor/PowerManageMonitor.inoを参照せよ。
+    instance.pmu.enableBattDetection();
+
     // Set brightness to MAX
     // T-LoRa-Pager brightness level is 0 ~ 16
     // T-Watch-S3 , T-Watch-S3-Plus , T-Watch-Ultra brightness level is 0 ~ 255
     instance.setBrightness(DEVICE_MAX_BRIGHTNESS_LEVEL);
+
+    // Register power event
+    instance.onEvent(power_event_cb, POWER_EVENT, NULL);
 }
 
 
@@ -386,6 +335,8 @@ void loop()
             Serial.println(buf);
         }
     }
+    // instance.onEventを処理するためにはこれを呼びだす必要がある。
+    instance.loop();
     lv_task_handler();
     delay(5);
 }
